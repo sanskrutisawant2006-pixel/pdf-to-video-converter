@@ -1,10 +1,10 @@
 import os
 import uuid
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, jsonify
 from pdf2image import convert_from_path
 from moviepy.editor import ImageClip, concatenate_videoclips
 
-# Fix FFmpeg for Render
+# Fix FFmpeg (Render)
 os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
 
 app = Flask(__name__)
@@ -26,11 +26,11 @@ def home():
 @app.route("/start", methods=["POST"])
 def start():
     global progress
-    progress["value"] = 0
+    progress = {"value": 0, "video": ""}
 
     file = request.files.get("pdf")
     if not file:
-        return "No file uploaded", 400
+        return "No file", 400
 
     duration = int(request.form.get("duration", 3))
 
@@ -42,12 +42,14 @@ def start():
     images = convert_from_path(pdf_path, poppler_path="/usr/bin")
 
     image_paths = []
+    total = len(images)
+
     for i, img in enumerate(images):
-        path = os.path.join(UPLOAD_FOLDER, f"page_{i}.jpg")
+        path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}.jpg")
         img.save(path, "JPEG")
         image_paths.append(path)
 
-        progress["value"] = int((i + 1) / len(images) * 40)
+        progress["value"] = int((i + 1) / total * 40)
 
     # Create video
     clips = []
@@ -55,7 +57,7 @@ def start():
         clip = ImageClip(path).set_duration(duration)
         clips.append(clip)
 
-        progress["value"] = 40 + int((i + 1) / len(image_paths) * 40)
+        progress["value"] = 40 + int((i + 1) / total * 40)
 
     video = concatenate_videoclips(clips, method="compose")
 
@@ -67,15 +69,18 @@ def start():
     progress["value"] = 100
     progress["video"] = output_name
 
-    return "Started"
+    return "done"
 
 
 @app.route("/progress")
 def get_progress():
-    return jsonify(progress)
+    global progress
+    return jsonify({
+        "progress": progress.get("value", 0),
+        "video": progress.get("video", "")
+    })
 
 
-# IMPORTANT FOR RENDER
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
