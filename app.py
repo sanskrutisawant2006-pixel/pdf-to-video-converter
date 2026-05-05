@@ -16,6 +16,7 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 progress = {"value": 0}
 
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -26,8 +27,10 @@ def start():
     global progress
     progress["value"] = 0
 
-    files = request.files.getlist("images")
+    # 🔴 match your UI
+    files = request.files.getlist("file")
     narration = request.form.get("narration", "")
+    durations_input = request.form.get("durations", "")
 
     if not files or files[0].filename == "":
         return "No images", 400
@@ -36,43 +39,60 @@ def start():
 
     # save images
     for file in files:
-        filename = str(uuid.uuid4()) + ".png"
+        filename = str(uuid.uuid4()) + ".jpg"
         path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(path)
         image_paths.append(path)
 
-    progress["value"] = 30
+    progress["value"] = 20
 
-    # narration audio
+    # 🔊 narration
     if narration.strip():
         tts = gTTS(text=narration)
         tts.save(os.path.join(OUTPUT_FOLDER, "audio.mp3"))
 
-    progress["value"] = 60
+    progress["value"] = 40
 
-    # video creation
+    # 🎯 parse durations
+    durations = []
+    if durations_input:
+        try:
+            durations = [int(x.strip()) for x in durations_input.split(",")]
+        except:
+            durations = []
+
+    # 🎥 create frames
+    fps = 18
     frames = []
 
-    for path in image_paths:
+    for i, path in enumerate(image_paths):
         img = Image.open(path).convert("RGB")
         img = img.resize((640, 480))
         frame = np.array(img)
 
-        # show each image ~2 sec (18 fps * 2)
-        for _ in range(36):
+        # duration per image
+        if i < len(durations):
+            seconds = durations[i]
+        else:
+            seconds = 3  # default
+
+        frame_count = seconds * fps
+
+        for _ in range(frame_count):
             frames.append(frame)
 
-    video_path = os.path.join(OUTPUT_FOLDER, "video.mp4")
+    progress["value"] = 70
 
-    imageio.mimsave(video_path, frames, fps=18)
+    video_path = os.path.join(OUTPUT_FOLDER, "video.mp4")
+    imageio.mimsave(video_path, frames, fps=fps)
 
     progress["value"] = 100
 
-    return jsonify({"status": "done"})
+    return "done"
 
 
 @app.route("/progress")
-def progress_route():
+def get_progress():
     return jsonify(progress)
 
 
@@ -81,7 +101,8 @@ def download():
     return send_file("static/output/video.mp4", as_attachment=True)
 
 
-# 🔴 CRITICAL FIX FOR RENDER
+# ✅ RENDER FIX (VERY IMPORTANT)
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
