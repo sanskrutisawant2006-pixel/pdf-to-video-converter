@@ -1,8 +1,8 @@
 
 from flask import Flask, render_template, request, send_file
 import os
+import subprocess
 from werkzeug.utils import secure_filename
-from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 from gtts import gTTS
 
 app = Flask(__name__)
@@ -25,68 +25,70 @@ def create_video():
         images = request.files.getlist("images")
         durations = request.form.get("durations", "")
         narration = request.form.get("narration", "")
-        audio = request.files.get("audio")
 
-        # durations
         duration_list = [int(x) for x in durations.split(",") if x.strip().isdigit()]
         if not duration_list:
             duration_list = [3] * len(images)
 
-        clips = []
-        total_duration = 0
+        image_paths = []
 
-        # create image clips
-        for i, image in enumerate(images):
+        # save images
+        for image in images:
             filename = secure_filename(image.filename)
             path = os.path.join(UPLOAD_FOLDER, filename)
             image.save(path)
+            image_paths.append(path)
 
-            duration = duration_list[i] if i < len(duration_list) else 3
-            total_duration += duration
+        # create text file for ffmpeg
+        list_file = os.path.join(OUTPUT_FOLDER, "images.txt")
 
-            clip = ImageClip(path).set_duration(duration)
-            clips.append(clip)
+        with open(list_file, "w") as f:
+            for i, path in enumerate(image_paths):
+                duration = duration_list[i] if i < len(duration_list) else 3
+                f.write(f"file '{path}'\n")
+                f.write(f"duration {duration}\n")
 
-        video = concatenate_videoclips(clips, method="compose")
+            # last image repeat (important for ffmpeg)
+            f.write(f"file '{image_paths[-1]}'\n")
 
+        # 🎤 narration
         audio_path = None
-
-        # 🎤 narration (gTTS)
         if narration.strip():
-            try:
-                audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
-                tts = gTTS(text=narration, lang="en")
-                tts.save(audio_path)
-            except Exception as e:
-                print("gTTS failed:", e)
+            audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
+            tts = gTTS(text=narration, lang="en")
+            tts.save(audio_path)
 
-        # 🎵 fallback audio
-        if not audio_path and audio and audio.filename != "":
-            audio_path = os.path.join(UPLOAD_FOLDER, secure_filename(audio.filename))
-            audio.save(audio_path)
+        output_video = os.path.join(OUTPUT_FOLDER, "output.mp4")
 
-        # attach audio safely
-        if audio_path and os.path.exists(audio_path):
-            audio_clip = AudioFileClip(audio_path)
+        # 🎬 ffmpeg command
+        if audio_path:
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", list_file,
+                "-i", audio_path,
+                "-vsync", "vfr",
+                "-pix_fmt", "yuv420p",
+                "-shortest",
+                output_video
+            ]
+        else:
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", list_file,
+                "-vsync", "vfr",
+                "-pix_fmt", "yuv420p",
+                output_video
+            ]
 
-            # 🔥 IMPORTANT FIX: match durations
-            if audio_clip.duration < total_duration:
-                audio_clip = audio_clip.set_duration(total_duration)
-            else:
-                audio_clip = audio_clip.subclip(0, total_duration)
+        subprocess.run(cmd, check=True)
 
-            video = video.set_audio(audio_clip)
-
-        output_path = os.path.join(OUTPUT_FOLDER, "output.mp4")
-
-        video.write_videofile(
-            output_path,
-            fps=24,
-            codec="libx264",
-            audio_codec="aac"
-        )
-
-        return send_file(output_path, as_attachment=True)
+        return send_file(output_video, as_attachment=True)
 
     except Exception as e:
         return f"Error: {str(e)}"
