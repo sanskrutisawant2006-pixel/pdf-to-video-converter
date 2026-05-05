@@ -1,13 +1,12 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import cv2
-import subprocess
 import os
+import numpy as np
 
 app = Flask(__name__)
 
 progress = {"value": 0}
 VIDEO_FILE = "video.mp4"
-FINAL_VIDEO = "final.mp4"
 
 
 @app.route("/")
@@ -20,26 +19,47 @@ def start():
     global progress
     progress["value"] = 0
 
-    files = request.files.getlist("file")
-    narration = request.form.get("narration", "")
+    file = request.files.get("file")
     durations = request.form.get("durations", "")
     default_duration = int(request.form.get("default_duration", 3))
     bg_audio = request.files.get("audio")
 
-    if not files or files[0].filename == "":
-        return "No images uploaded", 400
+    if not file:
+        return "No file uploaded", 400
 
-    image_paths = []
+    pdf_path = "input.pdf"
+    file.save(pdf_path)
 
-    for i, file in enumerate(files):
-        path = f"img_{i}.jpg"
-        file.save(path)
-        image_paths.append(path)
+    progress["value"] = 20
 
-    progress["value"] = 30
+    # 🔥 TRY converting PDF → images
+    images = []
 
-    frame = cv2.imread(image_paths[0])
-    height, width, _ = frame.shape
+    try:
+        from pdf2image import convert_from_path
+        images = convert_from_path(pdf_path)
+    except:
+        pass
+
+    # ❗ fallback if conversion fails
+    if not images:
+        img = np.ones((720, 1280, 3), dtype=np.uint8) * 255
+        cv2.putText(img, "PDF PROCESS FAILED", (200, 350),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+        images = [img]
+
+    progress["value"] = 40
+
+    # convert to cv2 frames
+    frames_list = []
+    for img in images:
+        if hasattr(img, "convert"):
+            img = img.convert("RGB")
+            img = np.array(img)
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        frames_list.append(img)
+
+    height, width, _ = frames_list[0].shape
 
     video = cv2.VideoWriter(
         VIDEO_FILE,
@@ -48,7 +68,9 @@ def start():
         (width, height)
     )
 
-    # safe custom durations
+    progress["value"] = 60
+
+    # durations
     custom = []
     if durations:
         try:
@@ -56,41 +78,40 @@ def start():
         except:
             custom = []
 
-    for i, path in enumerate(image_paths):
-        frame = cv2.imread(path)
-
-        if i < len(custom) and custom[i] > 0:
-            dur = custom[i]
-        else:
-            dur = default_duration
+    for i, frame in enumerate(frames_list):
+        dur = custom[i] if i < len(custom) else default_duration
 
         for _ in range(dur * 18):
             video.write(frame)
 
     video.release()
-    progress["value"] = 70
 
-    # 🎵 background audio
-    final_video = VIDEO_FILE
+    progress["value"] = 90
 
+    # 🎵 audio (optional)
     if bg_audio and bg_audio.filename != "":
         bg_audio.save("bg.mp3")
 
-        subprocess.call([
-            "ffmpeg", "-y",
-            "-i", VIDEO_FILE,
-            "-i", "bg.mp3",
-            "-shortest",
-            "-c:v", "copy",
-            "-c:a", "aac",
-            FINAL_VIDEO
-        ])
-
-        final_video = FINAL_VIDEO
+        import subprocess
+        try:
+            subprocess.call([
+                "ffmpeg", "-y",
+                "-i", VIDEO_FILE,
+                "-i", "bg.mp3",
+                "-shortest",
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "final.mp4"
+            ])
+            VIDEO = "final.mp4"
+        except:
+            VIDEO = VIDEO_FILE
+    else:
+        VIDEO = VIDEO_FILE
 
     progress["value"] = 100
 
-    return jsonify({"video": final_video})
+    return jsonify({"video": VIDEO})
 
 
 @app.route("/progress")
@@ -100,7 +121,9 @@ def progress_api():
 
 @app.route("/download")
 def download():
-    return send_file(FINAL_VIDEO if os.path.exists(FINAL_VIDEO) else VIDEO_FILE, as_attachment=True)
+    if os.path.exists("final.mp4"):
+        return send_file("final.mp4", as_attachment=True)
+    return send_file(VIDEO_FILE, as_attachment=True)
 
 
 if __name__ == "__main__":
