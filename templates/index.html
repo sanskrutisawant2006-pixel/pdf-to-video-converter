@@ -1,227 +1,131 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>PDF → Video Converter</title>
+    <title>PDF to Video Converter</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
 
-<style>
-body {
-    font-family: Arial;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    margin: 0;
-    text-align: center;
-}
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 400px;
+        }
 
-.container {
-    background: white;
-    width: 440px;
-    margin: 50px auto;
-    padding: 25px;
-    border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-}
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4facfe;
+            border: none;
+            color: white;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
 
-h2 { margin-bottom: 10px; }
+        .progress-bar {
+            width: 100%;
+            background: #eee;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
 
-.section {
-    text-align: left;
-    margin-top: 15px;
-}
+        .progress {
+            width: 0%;
+            height: 20px;
+            background: #00c6ff;
+            text-align: center;
+            color: white;
+            border-radius: 5px;
+        }
 
-label {
-    font-weight: bold;
-    font-size: 14px;
-}
+        video {
+            width: 100%;
+            margin-top: 10px;
+        }
 
-small {
-    color: gray;
-    display: block;
-    margin-bottom: 5px;
-}
-
-input, textarea {
-    width: 95%;
-    padding: 8px;
-    margin-top: 5px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-}
-
-button {
-    width: 100%;
-    padding: 12px;
-    margin-top: 15px;
-    background: #667eea;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-button:disabled {
-    background: gray;
-}
-
-/* Progress */
-.progress-box {
-    background: #eee;
-    margin-top: 15px;
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-#bar {
-    width: 0%;
-    height: 25px;
-    background: linear-gradient(90deg, #00c6ff, #0072ff);
-    color: white;
-    line-height: 25px;
-}
-
-/* Status text */
-#status {
-    margin-top: 10px;
-    font-size: 14px;
-    color: #444;
-}
-
-/* Video */
-video {
-    margin-top: 15px;
-    border-radius: 10px;
-}
-
-/* Download */
-#download {
-    display: none;
-    margin-top: 10px;
-    padding: 10px;
-    background: #28a745;
-    color: white;
-    text-decoration: none;
-    border-radius: 8px;
-}
-</style>
+        .download-btn {
+            background: #28a745;
+            margin-top: 10px;
+        }
+    </style>
 </head>
-
 <body>
 
 <div class="container">
+    <h2>PDF → Video Converter</h2>
 
-<h2>🚀 PDF → Video Converter</h2>
-<p style="color:gray;">Convert your PDF into a slideshow video</p>
+    <form id="form">
+        <label>Select Images:</label><br>
+        <input type="file" name="file" multiple required><br><br>
 
-<form id="form">
+        <label>Narration:</label><br>
+        <textarea name="narration" placeholder="Enter text..."></textarea><br><br>
 
-<div class="section">
-<label>📄 Upload PDF</label>
-<small>Select your PDF file</small>
-<input type="file" name="pdf" required>
-</div>
+        <label>Background Audio:</label><br>
+        <input type="file" name="audio"><br><br>
 
-<div class="section">
-<label>⏱ Seconds per Slide</label>
-<small>Default duration for each slide</small>
-<input type="number" name="duration" value="3">
-</div>
+        <button type="submit">✨ Create Video</button>
+    </form>
 
-<div class="section">
-<label>⚙ Custom Durations</label>
-<small>Example: 2,3,4 (optional)</small>
-<input type="text" name="custom_durations">
-</div>
+    <div class="progress-bar">
+        <div class="progress" id="progress">0%</div>
+    </div>
 
-<div class="section">
-<label>🎤 Narration</label>
-<small>Optional text-to-speech</small>
-<textarea name="narration"></textarea>
-</div>
+    <p id="status"></p>
 
-<div class="section">
-<label>🎵 Background Audio</label>
-<small>Optional music file</small>
-<input type="file" name="audio">
-</div>
+    <video id="video" controls></video>
 
-<button id="submitBtn">✨ Create Video</button>
-
-</form>
-
-<!-- Progress -->
-<div class="progress-box">
-    <div id="bar">0%</div>
-</div>
-
-<div id="status">Waiting for input...</div>
-
-<!-- Video -->
-<video id="video" width="100%" controls style="display:none;"></video>
-
-<a id="download" download>⬇ Download Video</a>
-
+    <a id="download" href="/download">
+        <button class="download-btn">⬇ Download Video</button>
+    </a>
 </div>
 
 <script>
-let running = false;
+    const form = document.getElementById("form");
+    const progressBar = document.getElementById("progress");
+    const status = document.getElementById("status");
+    const video = document.getElementById("video");
 
-document.getElementById("form").addEventListener("submit", function(e){
-    e.preventDefault();
+    form.addEventListener("submit", function(e) {
+        e.preventDefault();
 
-    let btn = document.getElementById("submitBtn");
-    btn.disabled = true;
-    btn.innerText = "Processing...";
+        const formData = new FormData(form);
 
-    document.getElementById("status").innerText = "Uploading and processing...";
-
-    let formData = new FormData(this);
-
-    fetch("/start", {
-        method: "POST",
-        body: formData
+        fetch("/start", {
+            method: "POST",
+            body: formData
+        }).then(() => {
+            checkProgress();
+        });
     });
 
-    running = true;
-    updateProgress();
-});
+    function checkProgress() {
+        let interval = setInterval(() => {
+            fetch("/progress")
+            .then(res => res.json())
+            .then(data => {
+                progressBar.style.width = data.value + "%";
+                progressBar.innerHTML = data.value + "%";
 
-function updateProgress(){
-    if (!running) return;
-
-    fetch("/progress")
-    .then(res => res.json())
-    .then(data => {
-
-        let p = data.progress;
-        let bar = document.getElementById("bar");
-
-        bar.style.width = p + "%";
-        bar.innerText = p + "%";
-
-        document.getElementById("status").innerText =
-            p < 100 ? "Generating video..." : "Video ready!";
-
-        if (p < 100){
-            setTimeout(updateProgress, 500);
-        } else {
-            running = false;
-
-            let url = "/static/" + data.video + "?t=" + new Date().getTime();
-
-            let video = document.getElementById("video");
-            video.src = url;
-            video.style.display = "block";
-
-            let download = document.getElementById("download");
-            download.href = url;
-            download.style.display = "block";
-
-            let btn = document.getElementById("submitBtn");
-            btn.disabled = false;
-            btn.innerText = "✨ Create Video";
-        }
-    });
-}
+                if (data.value === 100) {
+                    clearInterval(interval);
+                    status.innerHTML = "Video ready!";
+                    
+                    video.src = data.video + "?t=" + new Date().getTime();
+                }
+            });
+        }, 1000);
+    }
 </script>
 
 </body>
+</html>
 </html>
