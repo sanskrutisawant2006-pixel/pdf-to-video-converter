@@ -1,7 +1,1 @@
-services:
-  - type: web
-    name: pdf-video-app
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python app.py"
-    plan: free
+delete render.yaml
