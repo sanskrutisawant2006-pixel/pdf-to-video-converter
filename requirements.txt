@@ -1,5 +1,5 @@
 flask
-pdf2image
+pymupdf
+opencv-python-headless
 pillow
 numpy
-opencv-python-headless
