@@ -2,8 +2,8 @@
 from flask import Flask, request, jsonify, render_template
 import os
 import threading
-import cv2
 import fitz  # PyMuPDF
+import imageio.v2 as imageio
 
 app = Flask(__name__)
 
@@ -25,39 +25,36 @@ def home():
 def process_video(pdf_path, duration):
     global progress, video_name
 
-    # 🔹 Step 1: PDF → images (NO poppler needed)
+    # 🔹 Step 1: PDF → images
     doc = fitz.open(pdf_path)
     image_paths = []
 
     for i, page in enumerate(doc):
         pix = page.get_pixmap()
-        path = os.path.join(UPLOAD_FOLDER, f"page_{i}.jpg")
+        path = os.path.join(UPLOAD_FOLDER, f"page_{i}.png")
         pix.save(path)
         image_paths.append(path)
 
     progress = 60
 
-    # 🔹 Step 2: Create video using OpenCV (FIXED)
+    # 🔹 Step 2: Create video (FFMPEG via imageio)
     output_path = os.path.join(OUTPUT_FOLDER, "output.mp4")
 
-    first_frame = cv2.imread(image_paths[0])
-    height, width, _ = first_frame.shape
-
-    # ✅ Stable codec
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-
-    # ✅ Fixed fps
-    video = cv2.VideoWriter(output_path, fourcc, 1, (width, height))
+    writer = imageio.get_writer(
+        output_path,
+        fps=1,
+        codec='libx264',
+        format='FFMPEG'
+    )
 
     for img_path in image_paths:
-        img = cv2.imread(img_path)
-        img = cv2.resize(img, (width, height))
+        image = imageio.imread(img_path)
 
-        # ✅ Repeat frame for duration
+        # repeat frames for duration
         for _ in range(duration):
-            video.write(img)
+            writer.append_data(image)
 
-    video.release()
+    writer.close()
 
     progress = 100
     video_name = "output.mp4"
