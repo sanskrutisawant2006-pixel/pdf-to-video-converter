@@ -1,7 +1,7 @@
 flask
 pdf2image
-moviepy==1.0.3
+moviepy
+numpy
 pillow
 imageio
 imageio-ffmpeg
-numpy
