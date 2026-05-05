@@ -4,6 +4,7 @@ import os
 import subprocess
 from werkzeug.utils import secure_filename
 from gtts import gTTS
+import imageio_ffmpeg
 
 app = Flask(__name__)
 
@@ -31,7 +32,7 @@ def create_video():
 
         duration_list = [int(x) for x in durations.split(",") if x.strip().isdigit()]
         if not duration_list:
-            duration_list = [2] * len(images)  # 🔥 shorter = faster
+            duration_list = [2] * len(images)
 
         image_paths = []
 
@@ -42,7 +43,7 @@ def create_video():
             image.save(path)
             image_paths.append(path)
 
-        # Create ffmpeg list file
+        # Create FFmpeg input list
         list_file = os.path.join(OUTPUT_FOLDER, "images.txt")
 
         with open(list_file, "w") as f:
@@ -52,7 +53,7 @@ def create_video():
                 f.write(f"duration {duration}\n")
             f.write(f"file '{image_paths[-1]}'\n")
 
-        # 🎤 Generate narration
+        # 🎤 narration
         audio_path = None
         if narration.strip():
             try:
@@ -64,10 +65,12 @@ def create_video():
 
         output_video = os.path.join(OUTPUT_FOLDER, "output.mp4")
 
-        # 🎬 FAST FFmpeg command
+        # 🔥 use internal ffmpeg
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+
         if audio_path and os.path.exists(audio_path):
             cmd = [
-                "ffmpeg",
+                ffmpeg_path,
                 "-y",
                 "-f", "concat",
                 "-safe", "0",
@@ -81,7 +84,7 @@ def create_video():
             ]
         else:
             cmd = [
-                "ffmpeg",
+                ffmpeg_path,
                 "-y",
                 "-f", "concat",
                 "-safe", "0",
