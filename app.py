@@ -20,41 +20,47 @@ progress = {"value": 0}
 def index():
     return render_template("index.html")
 
+
 @app.route("/start", methods=["POST"])
 def start():
     global progress
     progress["value"] = 0
 
     files = request.files.getlist("images")
-    narration_text = request.form.get("narration", "")
-    
-    if not files or len(files) == 0:
-        return jsonify({"error": "No images uploaded"}), 400
+    narration = request.form.get("narration", "")
+
+    if not files or files[0].filename == "":
+        return "No images", 400
 
     image_paths = []
 
+    # save images
     for file in files:
-        path = os.path.join(UPLOAD_FOLDER, str(uuid.uuid4()) + ".png")
+        filename = str(uuid.uuid4()) + ".png"
+        path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(path)
         image_paths.append(path)
 
-    progress["value"] = 20
+    progress["value"] = 30
 
-    # 🔊 narration
-    audio_path = None
-    if narration_text.strip():
-        tts = gTTS(text=narration_text)
-        audio_path = os.path.join(OUTPUT_FOLDER, "audio.mp3")
-        tts.save(audio_path)
+    # narration audio
+    if narration.strip():
+        tts = gTTS(text=narration)
+        tts.save(os.path.join(OUTPUT_FOLDER, "audio.mp3"))
 
-    progress["value"] = 40
+    progress["value"] = 60
 
-    # 🎥 video creation
+    # video creation
     frames = []
+
     for path in image_paths:
         img = Image.open(path).convert("RGB")
         img = img.resize((640, 480))
-        frames.append(np.array(img))
+        frame = np.array(img)
+
+        # show each image ~2 sec (18 fps * 2)
+        for _ in range(36):
+            frames.append(frame)
 
     video_path = os.path.join(OUTPUT_FOLDER, "video.mp4")
 
@@ -62,15 +68,20 @@ def start():
 
     progress["value"] = 100
 
-    return jsonify({"video": video_path})
+    return jsonify({"status": "done"})
+
 
 @app.route("/progress")
-def get_progress():
+def progress_route():
     return jsonify(progress)
+
 
 @app.route("/download")
 def download():
     return send_file("static/output/video.mp4", as_attachment=True)
 
+
+# 🔴 CRITICAL FIX FOR RENDER
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port))
