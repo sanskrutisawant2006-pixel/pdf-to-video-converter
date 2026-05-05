@@ -1,7 +1,8 @@
 
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, jsonify
 import os
 import subprocess
+import threading
 from werkzeug.utils import secure_filename
 from gtts import gTTS
 import imageio_ffmpeg
@@ -10,10 +11,12 @@ import uuid
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "uploads"
-OUTPUT_FOLDER = "outputs"
+OUTPUT_FOLDER = "static"   # important: UI reads from /static/
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+progress = {"value": 0, "video": ""}
 
 
 @app.route("/")
@@ -21,76 +24,109 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/create-video", methods=["POST"])
-def create_video():
+# ---------- BACKGROUND WORKER ----------
+def process_video(images, narration, uid):
     try:
-        images = request.files.getlist("images")
-        narration = request.form.get("narration", "")
-
-        if not images:
-            return "No image uploaded"
-
-        unique_id = str(uuid.uuid4())
-
-        image_path = os.path.join(UPLOAD_FOLDER, f"{unique_id}.jpg")
-        audio_path = os.path.join(OUTPUT_FOLDER, f"{unique_id}.mp3")
-        output_video = os.path.join(OUTPUT_FOLDER, f"{unique_id}.mp4")
-
-        # save FIRST image only (keeps UI same but avoids heavy load)
-        images[0].save(image_path)
+        progress["value"] = 10
 
         ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
-        # 🎤 SAFE gTTS (THIS WAS YOUR MAIN ISSUE)
+        # Save images
+        image_paths = []
+        for i, img in enumerate(images):
+            path = os.path.join(UPLOAD_FOLDER, f"{uid}_{i}.jpg")
+            img.save(path)
+            image_paths.append(path)
+
+        progress["value"] = 30
+
+        # Create concat file
+        txt_file = os.path.join(UPLOAD_FOLDER, f"{uid}.txt")
+        with open(txt_file, "w") as f:
+            for img in image_paths:
+                f.write(f"file '{img}'\n")
+                f.write("duration 2\n")
+            f.write(f"file '{image_paths[-1]}'\n")
+
+        video_path = os.path.join(OUTPUT_FOLDER, f"{uid}.mp4")
+
+        # 🎬 create slideshow (FAST SETTINGS)
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", txt_file,
+            "-vf", "scale=640:480",
+            "-pix_fmt", "yuv420p",
+            video_path
+        ]
+
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        progress["value"] = 60
+
+        # 🎤 narration
+        audio_path = None
         if narration.strip():
             try:
+                audio_path = os.path.join(OUTPUT_FOLDER, f"{uid}.mp3")
                 tts = gTTS(text=narration[:150], lang="en")
                 tts.save(audio_path)
             except:
                 audio_path = None
-        else:
-            audio_path = None
 
-        # 🎬 CREATE VIDEO (VERY IMPORTANT FIXES HERE)
+        # 🎧 merge audio
         if audio_path and os.path.exists(audio_path):
-            cmd = [
+            final_path = os.path.join(OUTPUT_FOLDER, f"{uid}_final.mp4")
+
+            cmd_audio = [
                 ffmpeg,
                 "-y",
-                "-loop", "1",
-                "-i", image_path,
+                "-i", video_path,
                 "-i", audio_path,
-                "-c:v", "libx264",
-                "-t", "5",
-                "-pix_fmt", "yuv420p",
                 "-shortest",
-                output_video
-            ]
-        else:
-            cmd = [
-                ffmpeg,
-                "-y",
-                "-loop", "1",
-                "-i", image_path,
-                "-c:v", "libx264",
-                "-t", "5",
-                "-pix_fmt", "yuv420p",
-                output_video
+                final_path
             ]
 
-        # 🔥 CRITICAL: prevents hanging
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=25)
+            subprocess.run(cmd_audio, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            video_path = final_path
 
-        # check if file actually created
-        if not os.path.exists(output_video):
-            return "Video generation failed 😭"
-
-        return send_file(output_video, as_attachment=True)
-
-    except subprocess.TimeoutExpired:
-        return "Server too slow (Render free limit 😭)"
+        progress["value"] = 100
+        progress["video"] = os.path.basename(video_path)
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        print("ERROR:", e)
+        progress["value"] = 100
+
+
+# ---------- ROUTES ----------
+@app.route("/start", methods=["POST"])
+def start():
+    images = request.files.getlist("images")
+    narration = request.form.get("narration", "")
+
+    if not images:
+        return "No images uploaded", 400
+
+    uid = str(uuid.uuid4())
+
+    progress["value"] = 0
+    progress["video"] = ""
+
+    # 🚀 run in background (THIS FIXES FREEZE)
+    thread = threading.Thread(target=process_video, args=(images, narration, uid))
+    thread.start()
+
+    return "started"
+
+
+@app.route("/progress")
+def get_progress():
+    return jsonify({
+        "progress": progress["value"],
+        "video": progress["video"]
+    })
 
 
 if __name__ == "__main__":
