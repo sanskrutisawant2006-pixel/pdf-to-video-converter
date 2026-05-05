@@ -80,9 +80,9 @@
     <h2>PDF → Video Converter</h2>
 
     <!-- IMPORTANT: name="images" -->
-    <input type="file" id="images" name="images" multiple>
-
+    <input type="file" id="images" name="file" multiple>
     <!-- narration -->
+    <input type="text" name="durations" placeholder="e.g. 2,3,5">
     <textarea id="narration" name="narration" placeholder="Enter narration..."></textarea>
 
     <!-- audio (optional, backend not using but kept for UI same) -->
@@ -100,58 +100,47 @@
 </div>
 
 <script>
-
 function startProcess() {
-
-    let files = document.getElementById("images").files;
-    let narration = document.getElementById("narration").value;
-
-    if (files.length === 0) {
-        alert("Please upload images");
-        return;
-    }
+    const files = document.getElementById("images").files;
+    const narration = document.getElementById("narration").value;
+    const durations = document.querySelector('[name="durations"]').value;
+    const audio = document.getElementById("audio").files[0];
 
     let formData = new FormData();
 
-    // IMPORTANT: append as "images"
+    // VERY IMPORTANT 👇
     for (let i = 0; i < files.length; i++) {
-        formData.append("images", files[i]);
+        formData.append("file", files[i]);  // must match backend
     }
 
     formData.append("narration", narration);
+    formData.append("durations", durations);
+
+    if (audio) {
+        formData.append("audio", audio);
+    }
 
     fetch("/start", {
         method: "POST",
         body: formData
     });
 
-    updateProgress();
-}
-
-function updateProgress() {
-
+    // progress loop
     let interval = setInterval(() => {
         fetch("/progress")
         .then(res => res.json())
         .then(data => {
-
-            let val = data.value;
             let bar = document.getElementById("bar");
+            bar.style.width = data.progress + "%";
+            bar.innerText = data.progress + "%";
 
-            bar.style.width = val + "%";
-            bar.innerText = val + "%";
-
-            if (val >= 100) {
+            if (data.progress >= 100) {
                 clearInterval(interval);
-
-                document.getElementById("video").src = "/static/output/video.mp4";
                 document.getElementById("download").style.display = "block";
             }
         });
     }, 1000);
 }
-
 </script>
-
 </body>
 </html>
