@@ -5,6 +5,7 @@ import subprocess
 from werkzeug.utils import secure_filename
 from gtts import gTTS
 import imageio_ffmpeg
+import uuid
 
 app = Flask(__name__)
 
@@ -27,61 +28,66 @@ def create_video():
         narration = request.form.get("narration", "")
 
         if not images:
-            return "No images uploaded"
+            return "No image uploaded"
 
-        image_paths = []
+        unique_id = str(uuid.uuid4())
 
-        # save images
-        for img in images:
-            filename = secure_filename(img.filename)
-            path = os.path.join(UPLOAD_FOLDER, filename)
-            img.save(path)
-            image_paths.append(path)
+        image_path = os.path.join(UPLOAD_FOLDER, f"{unique_id}.jpg")
+        audio_path = os.path.join(OUTPUT_FOLDER, f"{unique_id}.mp3")
+        output_video = os.path.join(OUTPUT_FOLDER, f"{unique_id}.mp4")
 
-        # 🎤 narration (optional)
-        audio_path = None
+        # save FIRST image only (keeps UI same but avoids heavy load)
+        images[0].save(image_path)
+
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+
+        # 🎤 SAFE gTTS (THIS WAS YOUR MAIN ISSUE)
         if narration.strip():
-            audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
             try:
-                tts = gTTS(text=narration, lang="en")
+                tts = gTTS(text=narration[:150], lang="en")
                 tts.save(audio_path)
             except:
                 audio_path = None
+        else:
+            audio_path = None
 
-        output_video = os.path.join(OUTPUT_FOLDER, "output.mp4")
-        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-
-        # ⚡ FAST VIDEO (NO CONCAT FILE → MUCH FASTER)
-        cmd = [
-            ffmpeg,
-            "-y",
-            "-loop", "1",
-            "-t", "5",   # total video time (short for speed)
-            "-i", image_paths[0],  # only first image to avoid heavy processing
-            "-vf", "scale=640:480",
-            "-r", "24",
-            "-pix_fmt", "yuv420p",
-            output_video
-        ]
-
-        # if narration exists
+        # 🎬 CREATE VIDEO (VERY IMPORTANT FIXES HERE)
         if audio_path and os.path.exists(audio_path):
             cmd = [
                 ffmpeg,
                 "-y",
                 "-loop", "1",
-                "-i", image_paths[0],
+                "-i", image_path,
                 "-i", audio_path,
+                "-c:v", "libx264",
                 "-t", "5",
-                "-vf", "scale=640:480",
+                "-pix_fmt", "yuv420p",
                 "-shortest",
+                output_video
+            ]
+        else:
+            cmd = [
+                ffmpeg,
+                "-y",
+                "-loop", "1",
+                "-i", image_path,
+                "-c:v", "libx264",
+                "-t", "5",
                 "-pix_fmt", "yuv420p",
                 output_video
             ]
 
-        subprocess.run(cmd)
+        # 🔥 CRITICAL: prevents hanging
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=25)
+
+        # check if file actually created
+        if not os.path.exists(output_video):
+            return "Video generation failed 😭"
 
         return send_file(output_video, as_attachment=True)
+
+    except subprocess.TimeoutExpired:
+        return "Server too slow (Render free limit 😭)"
 
     except Exception as e:
         return f"Error: {str(e)}"
