@@ -1,13 +1,13 @@
 from flask import Flask, render_template, request, jsonify, send_file
-import os
 import cv2
-from pdf2image import convert_from_path
-from gtts import gTTS
+import subprocess
+import os
 
 app = Flask(__name__)
 
 progress = {"value": 0}
-OUTPUT_VIDEO = "output.mp4"
+VIDEO_FILE = "video.mp4"
+FINAL_VIDEO = "final.mp4"
 
 
 @app.route("/")
@@ -20,49 +20,35 @@ def start():
     global progress
     progress["value"] = 0
 
-    file = request.files.get("file")
+    files = request.files.getlist("file")
     narration = request.form.get("narration", "")
     durations = request.form.get("durations", "")
     default_duration = int(request.form.get("default_duration", 3))
+    bg_audio = request.files.get("audio")
 
-    if not file:
-        return "No file uploaded", 400
-
-    # Save PDF
-    pdf_path = "input.pdf"
-    file.save(pdf_path)
-
-    # Convert PDF → images
-    try:
-        images = convert_from_path(pdf_path)
-    except:
-        return "PDF conversion failed (poppler missing)", 500
-
-    if len(images) == 0:
-        return "Empty PDF", 500
-
-    progress["value"] = 25
+    if not files or files[0].filename == "":
+        return "No images uploaded", 400
 
     image_paths = []
-    for i, img in enumerate(images):
-        path = f"page_{i}.jpg"
-        img.save(path, "JPEG")
+
+    for i, file in enumerate(files):
+        path = f"img_{i}.jpg"
+        file.save(path)
         image_paths.append(path)
 
-    progress["value"] = 50
+    progress["value"] = 30
 
-    # Video setup
     frame = cv2.imread(image_paths[0])
     height, width, _ = frame.shape
 
     video = cv2.VideoWriter(
-        OUTPUT_VIDEO,
+        VIDEO_FILE,
         cv2.VideoWriter_fourcc(*'mp4v'),
         18,
         (width, height)
     )
 
-    # SAFE custom durations
+    # safe custom durations
     custom = []
     if durations:
         try:
@@ -70,44 +56,51 @@ def start():
         except:
             custom = []
 
-    # Create video frames
-    for i, img_path in enumerate(image_paths):
-        frame = cv2.imread(img_path)
+    for i, path in enumerate(image_paths):
+        frame = cv2.imread(path)
 
         if i < len(custom) and custom[i] > 0:
             dur = custom[i]
         else:
             dur = default_duration
 
-        frames = dur * 18
-
-        for _ in range(frames):
+        for _ in range(dur * 18):
             video.write(frame)
 
     video.release()
-    progress["value"] = 80
+    progress["value"] = 70
 
-    # Narration (optional)
-    if narration.strip():
-        try:
-            tts = gTTS(narration)
-            tts.save("audio.mp3")
-        except:
-            pass
+    # 🎵 background audio
+    final_video = VIDEO_FILE
+
+    if bg_audio and bg_audio.filename != "":
+        bg_audio.save("bg.mp3")
+
+        subprocess.call([
+            "ffmpeg", "-y",
+            "-i", VIDEO_FILE,
+            "-i", "bg.mp3",
+            "-shortest",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            FINAL_VIDEO
+        ])
+
+        final_video = FINAL_VIDEO
 
     progress["value"] = 100
 
-    return "done"
+    return jsonify({"video": final_video})
 
 
 @app.route("/progress")
-def get_progress():
-    return jsonify({"progress": progress["value"]})
+def progress_api():
+    return jsonify(progress)
 
 
 @app.route("/download")
 def download():
-    return send_file(OUTPUT_VIDEO, as_attachment=True)
+    return send_file(FINAL_VIDEO if os.path.exists(FINAL_VIDEO) else VIDEO_FILE, as_attachment=True)
 
 
 if __name__ == "__main__":
