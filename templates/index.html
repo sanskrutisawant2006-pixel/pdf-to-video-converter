@@ -2,51 +2,79 @@
 <html>
 <head>
     <title>PDF → Video Converter</title>
+
     <style>
         body {
             font-family: Arial;
-            background: linear-gradient(to right, #a18cd1, #fbc2eb);
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            margin: 0;
+            padding: 0;
             text-align: center;
         }
 
         .container {
             background: white;
-            width: 400px;
-            margin: auto;
-            margin-top: 50px;
-            padding: 20px;
-            border-radius: 10px;
+            width: 420px;
+            margin: 50px auto;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h2 {
+            margin-bottom: 20px;
         }
 
         input, textarea {
             width: 90%;
-            margin: 10px;
-            padding: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: 1px solid #ccc;
         }
 
         button {
-            padding: 10px 20px;
-            background: #4facfe;
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
             border: none;
             color: white;
-            border-radius: 5px;
+            padding: 12px;
+            width: 95%;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
         }
 
         .progress {
             width: 100%;
             background: #eee;
-            margin-top: 10px;
+            border-radius: 5px;
+            margin-top: 15px;
         }
 
         .progress-bar {
+            height: 20px;
             width: 0%;
-            background: #4facfe;
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
             color: white;
+            text-align: center;
+            border-radius: 5px;
         }
 
         video {
             width: 100%;
-            margin-top: 10px;
+            margin-top: 15px;
+            border-radius: 8px;
+        }
+
+        .label {
+            text-align: left;
+            margin-left: 5%;
+            font-size: 14px;
+            color: #555;
         }
     </style>
 </head>
@@ -54,25 +82,25 @@
 <body>
 
 <div class="container">
+
     <h2>🚀 PDF → Video Converter</h2>
 
     <form id="form">
-        <p>Upload PDF</p>
+
+        <div class="label">Upload PDF</div>
         <input type="file" name="file">
 
-        <p>Seconds per slide</p>
+        <div class="label">Seconds per slide</div>
         <input type="number" name="default_duration" value="3">
 
-        <p>Custom durations (optional)</p>
+        <div class="label">Custom durations (optional)</div>
         <input type="text" name="durations" placeholder="e.g. 2,3,5">
 
-        <p>Narration</p>
-        <textarea name="narration"></textarea>
-
-        <p>Background Audio</p>
-        <input type="file" name="audio">
+        <div class="label">Narration</div>
+        <textarea name="narration" placeholder="Enter narration..."></textarea>
 
         <button type="button" onclick="startProcess()">✨ Create Video</button>
+
     </form>
 
     <div class="progress">
@@ -82,10 +110,13 @@
     <video id="video" controls></video>
 
     <a id="download" href="/download" style="display:none;">Download Video</a>
+
 </div>
 
 <script>
+
 function startProcess() {
+
     let formData = new FormData(document.getElementById("form"));
 
     fetch("/start", {
@@ -94,21 +125,28 @@ function startProcess() {
     });
 
     let interval = setInterval(() => {
+
         fetch("/progress")
         .then(res => res.json())
         .then(data => {
+
             let bar = document.getElementById("bar");
+
             bar.style.width = data.progress + "%";
             bar.innerHTML = data.progress + "%";
 
             if (data.progress >= 100) {
                 clearInterval(interval);
+
                 document.getElementById("video").src = "/download";
                 document.getElementById("download").style.display = "block";
             }
+
         });
+
     }, 1000);
 }
+
 </script>
 
 </body>
