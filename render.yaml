@@ -5,8 +5,9 @@ services:
     plan: free
 
     buildCommand: |
+      apt-get update
+      apt-get install -y poppler-utils ffmpeg
       pip install -r requirements.txt
-      apt-get update && apt-get install -y poppler-utils ffmpeg
 
     startCommand: python app.py
 
