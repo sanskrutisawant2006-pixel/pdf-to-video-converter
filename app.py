@@ -24,78 +24,62 @@ def index():
 def create_video():
     try:
         images = request.files.getlist("images")
-        durations = request.form.get("durations", "")
         narration = request.form.get("narration", "")
 
-        if not images or images[0].filename == "":
+        if not images:
             return "No images uploaded"
-
-        duration_list = [int(x) for x in durations.split(",") if x.strip().isdigit()]
-        if not duration_list:
-            duration_list = [2] * len(images)
 
         image_paths = []
 
-        # Save images
-        for image in images:
-            filename = secure_filename(image.filename)
+        # save images
+        for img in images:
+            filename = secure_filename(img.filename)
             path = os.path.join(UPLOAD_FOLDER, filename)
-            image.save(path)
+            img.save(path)
             image_paths.append(path)
 
-        # Create FFmpeg input list
-        list_file = os.path.join(OUTPUT_FOLDER, "images.txt")
-
-        with open(list_file, "w") as f:
-            for i, path in enumerate(image_paths):
-                duration = duration_list[i] if i < len(duration_list) else 2
-                f.write(f"file '{path}'\n")
-                f.write(f"duration {duration}\n")
-            f.write(f"file '{image_paths[-1]}'\n")
-
-        # 🎤 narration
+        # 🎤 narration (optional)
         audio_path = None
         if narration.strip():
+            audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
             try:
-                audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
                 tts = gTTS(text=narration, lang="en")
                 tts.save(audio_path)
-            except Exception as e:
-                print("TTS failed:", e)
+            except:
+                audio_path = None
 
         output_video = os.path.join(OUTPUT_FOLDER, "output.mp4")
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 
-        # 🔥 use internal ffmpeg
-        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        # ⚡ FAST VIDEO (NO CONCAT FILE → MUCH FASTER)
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-loop", "1",
+            "-t", "5",   # total video time (short for speed)
+            "-i", image_paths[0],  # only first image to avoid heavy processing
+            "-vf", "scale=640:480",
+            "-r", "24",
+            "-pix_fmt", "yuv420p",
+            output_video
+        ]
 
+        # if narration exists
         if audio_path and os.path.exists(audio_path):
             cmd = [
-                ffmpeg_path,
+                ffmpeg,
                 "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", list_file,
+                "-loop", "1",
+                "-i", image_paths[0],
                 "-i", audio_path,
+                "-t", "5",
                 "-vf", "scale=640:480",
-                "-r", "24",
-                "-pix_fmt", "yuv420p",
                 "-shortest",
-                output_video
-            ]
-        else:
-            cmd = [
-                ffmpeg_path,
-                "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", list_file,
-                "-vf", "scale=640:480",
-                "-r", "24",
                 "-pix_fmt", "yuv420p",
                 output_video
             ]
 
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd)
 
         return send_file(output_video, as_attachment=True)
 
