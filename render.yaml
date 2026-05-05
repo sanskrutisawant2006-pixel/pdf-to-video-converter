@@ -1,9 +1,15 @@
 services:
   - type: web
-    name: pdf-to-video
-    env: python
+    name: pdf-to-video-converter
+    runtime: python
+    plan: free
+
     buildCommand: |
-      apt-get update && apt-get install -y ffmpeg poppler-utils
-      pip install --upgrade pip
-      pip install --no-cache-dir -r requirements.txt
+      pip install -r requirements.txt
+      apt-get update && apt-get install -y poppler-utils ffmpeg
+
     startCommand: python app.py
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10
