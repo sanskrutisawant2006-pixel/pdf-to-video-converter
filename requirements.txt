@@ -1,7 +1,2 @@
 flask
-moviepy
 gtts
-pillow
-imageio
-imageio-ffmpeg
-numpy
