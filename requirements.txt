@@ -1,6 +1,5 @@
 flask
 pdf2image
-moviepy
 numpy
 pillow
 imageio
