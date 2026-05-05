@@ -1,5 +1,6 @@
 flask
 pymupdf
-opencv-python-headless
+imageio
+imageio-ffmpeg
 pillow
 numpy
