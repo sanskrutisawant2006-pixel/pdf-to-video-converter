@@ -26,42 +26,46 @@ def create_video():
         durations = request.form.get("durations", "")
         narration = request.form.get("narration", "")
 
+        if not images or images[0].filename == "":
+            return "No images uploaded"
+
         duration_list = [int(x) for x in durations.split(",") if x.strip().isdigit()]
         if not duration_list:
-            duration_list = [3] * len(images)
+            duration_list = [2] * len(images)  # 🔥 shorter = faster
 
         image_paths = []
 
-        # save images
+        # Save images
         for image in images:
             filename = secure_filename(image.filename)
             path = os.path.join(UPLOAD_FOLDER, filename)
             image.save(path)
             image_paths.append(path)
 
-        # create text file for ffmpeg
+        # Create ffmpeg list file
         list_file = os.path.join(OUTPUT_FOLDER, "images.txt")
 
         with open(list_file, "w") as f:
             for i, path in enumerate(image_paths):
-                duration = duration_list[i] if i < len(duration_list) else 3
+                duration = duration_list[i] if i < len(duration_list) else 2
                 f.write(f"file '{path}'\n")
                 f.write(f"duration {duration}\n")
-
-            # last image repeat (important for ffmpeg)
             f.write(f"file '{image_paths[-1]}'\n")
 
-        # 🎤 narration
+        # 🎤 Generate narration
         audio_path = None
         if narration.strip():
-            audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
-            tts = gTTS(text=narration, lang="en")
-            tts.save(audio_path)
+            try:
+                audio_path = os.path.join(OUTPUT_FOLDER, "tts.mp3")
+                tts = gTTS(text=narration, lang="en")
+                tts.save(audio_path)
+            except Exception as e:
+                print("TTS failed:", e)
 
         output_video = os.path.join(OUTPUT_FOLDER, "output.mp4")
 
-        # 🎬 ffmpeg command
-        if audio_path:
+        # 🎬 FAST FFmpeg command
+        if audio_path and os.path.exists(audio_path):
             cmd = [
                 "ffmpeg",
                 "-y",
@@ -69,7 +73,8 @@ def create_video():
                 "-safe", "0",
                 "-i", list_file,
                 "-i", audio_path,
-                "-vsync", "vfr",
+                "-vf", "scale=640:480",
+                "-r", "24",
                 "-pix_fmt", "yuv420p",
                 "-shortest",
                 output_video
@@ -81,7 +86,8 @@ def create_video():
                 "-f", "concat",
                 "-safe", "0",
                 "-i", list_file,
-                "-vsync", "vfr",
+                "-vf", "scale=640:480",
+                "-r", "24",
                 "-pix_fmt", "yuv420p",
                 output_video
             ]
