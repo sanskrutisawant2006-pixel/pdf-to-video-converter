@@ -1,6 +1,5 @@
 flask
-pymupdf
-imageio
-imageio-ffmpeg
+pdf2image
 pillow
-numpy
+imageio
+gtts
