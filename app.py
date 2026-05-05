@@ -1,123 +1,76 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
-import uuid
-import threading
-from gtts import gTTS
 from PIL import Image
-import cv2
+import imageio.v2 as imageio
 import numpy as np
+from gtts import gTTS
+import uuid
 
 app = Flask(__name__)
 
-UPLOAD_FOLDER = "static"
+UPLOAD_FOLDER = "static/uploads"
+OUTPUT_FOLDER = "static/output"
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-progress = {"value": 0, "video": ""}
-
-
-def create_video(images, output_path):
-    try:
-        first_img = Image.open(images[0]).convert("RGB")
-        size = first_img.size  # (width, height)
-
-        fps = 18
-        seconds_per_image = 2
-        frames_per_image = fps * seconds_per_image
-
-        out = cv2.VideoWriter(
-            output_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
-            fps,
-            size
-        )
-
-        for img_path in images:
-            img = Image.open(img_path).convert("RGB")
-            img = img.resize(size)
-            frame = np.array(img)
-
-            for _ in range(frames_per_image):
-                out.write(frame)
-
-        out.release()
-        print("✅ Video created")
-
-    except Exception as e:
-        print("❌ Video error:", e)
-
-
-def process_video(images, narration, uid):
-    try:
-        progress["value"] = 10
-
-        saved_images = []
-        for img in images:
-            path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}.jpg")
-            img.save(path)
-            saved_images.append(path)
-
-        progress["value"] = 40
-
-        # 🔊 Narration (gTTS)
-        if narration.strip():
-            audio_path = os.path.join(UPLOAD_FOLDER, f"{uid}.mp3")
-            tts = gTTS(narration)
-            tts.save(audio_path)
-            print("✅ Audio generated")
-
-        progress["value"] = 70
-
-        # 🎬 Video
-        video_path = os.path.join(UPLOAD_FOLDER, f"{uid}.mp4")
-        create_video(saved_images, video_path)
-
-        if os.path.exists(video_path):
-            progress["value"] = 100
-            progress["video"] = video_path
-        else:
-            progress["value"] = 0
-
-    except Exception as e:
-        print("❌ Processing error:", e)
-        progress["value"] = 0
-
+progress = {"value": 0}
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
-
 @app.route("/start", methods=["POST"])
 def start():
-    images = request.files.getlist("file")  # 🔥 MUST MATCH HTML
-    narration = request.form.get("narration", "")
-
-    if not images or images[0].filename == "":
-        return "No images", 400
-
-    uid = str(uuid.uuid4())
-
+    global progress
     progress["value"] = 0
-    progress["video"] = ""
 
-    thread = threading.Thread(target=process_video, args=(images, narration, uid))
-    thread.start()
+    files = request.files.getlist("images")
+    narration_text = request.form.get("narration", "")
+    
+    if not files or len(files) == 0:
+        return jsonify({"error": "No images uploaded"}), 400
 
-    return "started"
+    image_paths = []
 
+    for file in files:
+        path = os.path.join(UPLOAD_FOLDER, str(uuid.uuid4()) + ".png")
+        file.save(path)
+        image_paths.append(path)
+
+    progress["value"] = 20
+
+    # 🔊 narration
+    audio_path = None
+    if narration_text.strip():
+        tts = gTTS(text=narration_text)
+        audio_path = os.path.join(OUTPUT_FOLDER, "audio.mp3")
+        tts.save(audio_path)
+
+    progress["value"] = 40
+
+    # 🎥 video creation
+    frames = []
+    for path in image_paths:
+        img = Image.open(path).convert("RGB")
+        img = img.resize((640, 480))
+        frames.append(np.array(img))
+
+    video_path = os.path.join(OUTPUT_FOLDER, "video.mp4")
+
+    imageio.mimsave(video_path, frames, fps=18)
+
+    progress["value"] = 100
+
+    return jsonify({"video": video_path})
 
 @app.route("/progress")
 def get_progress():
     return jsonify(progress)
 
-
 @app.route("/download")
 def download():
-    video = progress.get("video")
-    if video and os.path.exists(video):
-        return send_file(video, as_attachment=True)
-    return "No video", 404
-
+    return send_file("static/output/video.mp4", as_attachment=True)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(debug=True)
