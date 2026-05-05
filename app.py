@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 import os
 import uuid
 import threading
@@ -15,38 +15,41 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 progress = {"value": 0, "video": ""}
 
 
-def create_video(images, audio_path, output_path):
-    frame_array = []
-    size = None
+def create_video(images, output_path):
+    try:
+        first_img = Image.open(images[0]).convert("RGB")
+        size = first_img.size  # (width, height)
 
-    for img_file in images:
-        img = Image.open(img_file)
-        img = img.convert("RGB")
-        img = np.array(img)
+        fps = 18
+        seconds_per_image = 2
+        frames_per_image = fps * seconds_per_image
 
-        if size is None:
-            size = (img.shape[1], img.shape[0])
+        out = cv2.VideoWriter(
+            output_path,
+            cv2.VideoWriter_fourcc(*'mp4v'),
+            fps,
+            size
+        )
 
-        frame_array.append(img)
+        for img_path in images:
+            img = Image.open(img_path).convert("RGB")
+            img = img.resize(size)
+            frame = np.array(img)
 
-    out = cv2.VideoWriter(
-        output_path,
-        cv2.VideoWriter_fourcc(*'mp4v'),
-        1,  # fps
-        size
-    )
+            for _ in range(frames_per_image):
+                out.write(frame)
 
-    for frame in frame_array:
-        out.write(frame)
+        out.release()
+        print("✅ Video created")
 
-    out.release()
+    except Exception as e:
+        print("❌ Video error:", e)
 
 
 def process_video(images, narration, uid):
     try:
         progress["value"] = 10
 
-        # Save images temporarily
         saved_images = []
         for img in images:
             path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}.jpg")
@@ -55,24 +58,27 @@ def process_video(images, narration, uid):
 
         progress["value"] = 40
 
-        # Generate narration
-        audio_path = ""
-        if narration.strip() != "":
+        # 🔊 Narration (gTTS)
+        if narration.strip():
             audio_path = os.path.join(UPLOAD_FOLDER, f"{uid}.mp3")
             tts = gTTS(narration)
             tts.save(audio_path)
+            print("✅ Audio generated")
 
         progress["value"] = 70
 
-        # Create video
+        # 🎬 Video
         video_path = os.path.join(UPLOAD_FOLDER, f"{uid}.mp4")
-        create_video(saved_images, audio_path, video_path)
+        create_video(saved_images, video_path)
 
-        progress["value"] = 100
-        progress["video"] = video_path
+        if os.path.exists(video_path):
+            progress["value"] = 100
+            progress["video"] = video_path
+        else:
+            progress["value"] = 0
 
     except Exception as e:
-        print("ERROR:", e)
+        print("❌ Processing error:", e)
         progress["value"] = 0
 
 
@@ -83,13 +89,11 @@ def index():
 
 @app.route("/start", methods=["POST"])
 def start():
-    images = request.files.getlist("file")  # 🔥 IMPORTANT FIX
+    images = request.files.getlist("file")  # 🔥 MUST MATCH HTML
     narration = request.form.get("narration", "")
 
-    print("FILES:", images)
-
     if not images or images[0].filename == "":
-        return "No images uploaded", 400
+        return "No images", 400
 
     uid = str(uuid.uuid4())
 
@@ -116,4 +120,4 @@ def download():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=10000).0.0.0", port=10000)
