@@ -1,20 +1,14 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os
-from PIL import Image
-import imageio.v2 as imageio
-import numpy as np
+import cv2
+from pdf2image import convert_from_path
 from gtts import gTTS
-import uuid
+import subprocess
 
 app = Flask(__name__)
 
-UPLOAD_FOLDER = "static/uploads"
-OUTPUT_FOLDER = "static/output"
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
 progress = {"value": 0}
+OUTPUT_VIDEO = "output.mp4"
 
 
 @app.route("/")
@@ -27,64 +21,102 @@ def start():
     global progress
     progress["value"] = 0
 
-    # 🔴 match your UI
-    files = request.files.getlist("file")
+    file = request.files.get("file")
     narration = request.form.get("narration", "")
-    durations_input = request.form.get("durations", "")
+    durations = request.form.get("durations", "")
+    default_duration = int(request.form.get("default_duration", 3))
+    bg_audio = request.files.get("audio")
 
-    if not files or files[0].filename == "":
-        return "No images", 400
+    if not file:
+        return "No file uploaded", 400
 
-    image_paths = []
+    # save PDF
+    pdf_path = "input.pdf"
+    file.save(pdf_path)
 
-    # save images
-    for file in files:
-        filename = str(uuid.uuid4()) + ".jpg"
-        path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(path)
-        image_paths.append(path)
-
+    # 🔥 Step 1: PDF → images
+    images = convert_from_path(pdf_path)
     progress["value"] = 20
 
-    # 🔊 narration
-    if narration.strip():
-        tts = gTTS(text=narration)
-        tts.save(os.path.join(OUTPUT_FOLDER, "audio.mp3"))
+    image_paths = []
+    for i, img in enumerate(images):
+        path = f"page_{i}.jpg"
+        img.save(path, "JPEG")
+        image_paths.append(path)
 
     progress["value"] = 40
 
-    # 🎯 parse durations
-    durations = []
-    if durations_input:
-        try:
-            durations = [int(x.strip()) for x in durations_input.split(",")]
-        except:
-            durations = []
+    # 🔥 Step 2: Create video
+    frame = cv2.imread(image_paths[0])
+    height, width, _ = frame.shape
 
-    # 🎥 create frames
-    fps = 18
-    frames = []
+    temp_video = "video.mp4"
 
-    for i, path in enumerate(image_paths):
-        img = Image.open(path).convert("RGB")
-        img = img.resize((640, 480))
-        frame = np.array(img)
+    video = cv2.VideoWriter(
+        temp_video,
+        cv2.VideoWriter_fourcc(*'mp4v'),
+        18,
+        (width, height)
+    )
 
-        # duration per image
-        if i < len(durations):
-            seconds = durations[i]
-        else:
-            seconds = 3  # default
+    custom = list(map(int, durations.split(","))) if durations else []
 
-        frame_count = seconds * fps
+    for i, img_path in enumerate(image_paths):
+        frame = cv2.imread(img_path)
 
-        for _ in range(frame_count):
-            frames.append(frame)
+        dur = custom[i] if i < len(custom) else default_duration
+        frames = dur * 18
 
+        for _ in range(frames):
+            video.write(frame)
+
+    video.release()
     progress["value"] = 70
 
-    video_path = os.path.join(OUTPUT_FOLDER, "video.mp4")
-    imageio.mimsave(video_path, frames, fps=fps)
+    # 🔥 Step 3: Audio (gTTS + background)
+    audio_files = []
+
+    if narration.strip():
+        tts = gTTS(narration)
+        tts.save("tts.mp3")
+        audio_files.append("tts.mp3")
+
+    if bg_audio:
+        bg_audio.save("bg.mp3")
+        audio_files.append("bg.mp3")
+
+    final_audio = None
+
+    if len(audio_files) == 1:
+        final_audio = audio_files[0]
+
+    elif len(audio_files) == 2:
+        final_audio = "merged_audio.mp3"
+
+        subprocess.call([
+            "ffmpeg", "-y",
+            "-i", audio_files[0],
+            "-i", audio_files[1],
+            "-filter_complex", "amix=inputs=2:duration=longest",
+            final_audio
+        ])
+
+    progress["value"] = 85
+
+    # 🔥 Step 4: Merge video + audio
+    final_video = OUTPUT_VIDEO
+
+    if final_audio:
+        subprocess.call([
+            "ffmpeg", "-y",
+            "-i", temp_video,
+            "-i", final_audio,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            final_video
+        ])
+    else:
+        final_video = temp_video
 
     progress["value"] = 100
 
@@ -93,16 +125,14 @@ def start():
 
 @app.route("/progress")
 def get_progress():
-    return jsonify(progress)
+    return jsonify({"progress": progress["value"]})
 
 
 @app.route("/download")
 def download():
-    return send_file("static/output/video.mp4", as_attachment=True)
+    return send_file(OUTPUT_VIDEO, as_attachment=True)
 
 
-# ✅ RENDER FIX (VERY IMPORTANT)
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
