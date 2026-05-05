@@ -1,6 +1,5 @@
 flask
 pdf2image
-numpy
 pillow
-imageio
-imageio-ffmpeg
+numpy
+opencv-python-headless
