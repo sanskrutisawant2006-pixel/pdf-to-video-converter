@@ -1,6 +1,7 @@
-Flask
+flask
+pdf2image
 moviepy
-Pillow
+numpy
+pillow
 imageio
 imageio-ffmpeg
-numpy
