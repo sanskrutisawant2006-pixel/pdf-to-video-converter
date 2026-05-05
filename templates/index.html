@@ -2,10 +2,11 @@
 <html>
 <head>
     <title>PDF → Video Converter</title>
+
     <style>
         body {
             font-family: Arial;
-            background: linear-gradient(to right, #7f9cf5, #c084fc);
+            background: linear-gradient(to right, #7F7FD5, #86A8E7, #91EAE4);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -17,75 +18,107 @@
             padding: 25px;
             border-radius: 10px;
             width: 350px;
-            box-shadow: 0px 5px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
         }
 
         h2 {
             text-align: center;
         }
 
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 12px;
+        }
+
+        small {
+            color: gray;
+        }
+
         input, textarea {
             width: 100%;
-            margin-top: 8px;
-            margin-bottom: 15px;
             padding: 8px;
+            margin-top: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        textarea {
+            resize: none;
         }
 
         button {
             width: 100%;
+            margin-top: 15px;
             padding: 10px;
-            background: #4f46e5;
-            color: white;
+            background: #4facfe;
             border: none;
+            color: white;
             border-radius: 5px;
             cursor: pointer;
         }
 
         .progress {
-            margin-top: 10px;
-            height: 20px;
+            width: 100%;
             background: #eee;
-            border-radius: 10px;
-            overflow: hidden;
+            margin-top: 10px;
+            border-radius: 5px;
         }
 
         .progress-bar {
-            height: 100%;
             width: 0%;
-            background: #4f46e5;
+            height: 20px;
+            background: #00c6ff;
             text-align: center;
             color: white;
+            border-radius: 5px;
         }
 
         video {
             width: 100%;
-            margin-top: 15px;
+            margin-top: 10px;
         }
 
-        .download {
+        a {
             display: block;
-            margin-top: 10px;
             text-align: center;
+            margin-top: 10px;
+            padding: 10px;
             background: green;
             color: white;
-            padding: 10px;
             text-decoration: none;
             border-radius: 5px;
         }
     </style>
 </head>
+
 <body>
 
 <div class="container">
     <h2>PDF → Video Converter</h2>
 
-    <!-- IMPORTANT: name="images" -->
+    <!-- Images -->
+    <label>Select Images</label>
     <input type="file" id="images" name="file" multiple>
-    <!-- narration -->
-    <input type="text" name="durations" placeholder="e.g. 2,3,5">
-    <textarea id="narration" name="narration" placeholder="Enter narration..."></textarea>
 
-    <!-- audio (optional, backend not using but kept for UI same) -->
+    <!-- Default duration -->
+    <label>⏱ Seconds per Slide</label>
+    <small>Default duration for each slide</small>
+    <input type="number" id="default_duration" value="3">
+
+    <!-- Custom duration -->
+    <label>⚙ Custom Durations</label>
+    <small>Example: 2,3,4 (optional)</small>
+    <input type="text" id="durations" name="durations" placeholder="4,5,6">
+
+    <!-- Narration -->
+    <label>🎤 Narration</label>
+    <small>Optional text-to-speech</small>
+    <textarea id="narration" name="narration">hi my name is sanskruti</textarea>
+
+    <!-- Audio -->
+    <label>🎵 Background Audio</label>
+    <small>Optional music file</small>
     <input type="file" id="audio" name="audio">
 
     <button onclick="startProcess()">✨ Create Video</button>
@@ -94,27 +127,30 @@
         <div id="bar" class="progress-bar">0%</div>
     </div>
 
+    <p id="status" style="text-align:center;">Generating video...</p>
+
     <video id="video" controls></video>
 
-    <a id="download" class="download" href="/download" style="display:none;">⬇ Download Video</a>
+    <a id="download" href="/download" style="display:none;">⬇ Download Video</a>
 </div>
 
 <script>
 function startProcess() {
     const files = document.getElementById("images").files;
     const narration = document.getElementById("narration").value;
-    const durations = document.querySelector('[name="durations"]').value;
+    const durations = document.getElementById("durations").value;
+    const default_duration = document.getElementById("default_duration").value;
     const audio = document.getElementById("audio").files[0];
 
     let formData = new FormData();
 
-    // VERY IMPORTANT 👇
     for (let i = 0; i < files.length; i++) {
-        formData.append("file", files[i]);  // must match backend
+        formData.append("file", files[i]);
     }
 
     formData.append("narration", narration);
     formData.append("durations", durations);
+    formData.append("default_duration", default_duration);
 
     if (audio) {
         formData.append("audio", audio);
@@ -125,7 +161,6 @@ function startProcess() {
         body: formData
     });
 
-    // progress loop
     let interval = setInterval(() => {
         fetch("/progress")
         .then(res => res.json())
@@ -137,10 +172,12 @@ function startProcess() {
             if (data.progress >= 100) {
                 clearInterval(interval);
                 document.getElementById("download").style.display = "block";
+                document.getElementById("video").src = "/download";
             }
         });
     }, 1000);
 }
 </script>
+
 </body>
 </html>
