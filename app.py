@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template
 import os
 import threading
 from pdf2image import convert_from_path
-import imageio.v2 as imageio
+import cv2
 
 app = Flask(__name__)
 
@@ -19,11 +19,12 @@ video_name = ""
 def home():
     return render_template("index.html")
 
+
 def process_video(pdf_path, duration):
     global progress, video_name
 
-    # Step 1: Convert PDF → images (LOW QUALITY = FAST)
-    pages = convert_from_path(pdf_path, dpi=60)
+    # 🔹 Step 1: PDF → Images (LOW DPI = FAST)
+    pages = convert_from_path(pdf_path, dpi=50)
     progress = 30
 
     image_paths = []
@@ -34,16 +35,24 @@ def process_video(pdf_path, duration):
 
     progress = 60
 
-    # Step 2: Create video using imageio (LIGHT 🔥)
+    # 🔹 Step 2: Create Video using OpenCV (LIGHT 🔥)
     output_path = os.path.join(OUTPUT_FOLDER, "output.mp4")
 
-    with imageio.get_writer(output_path, fps=1/duration) as writer:
-        for img_path in image_paths:
-            image = imageio.imread(img_path)
-            writer.append_data(image)
+    first_frame = cv2.imread(image_paths[0])
+    height, width, _ = first_frame.shape
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video = cv2.VideoWriter(output_path, fourcc, 1/duration, (width, height))
+
+    for img_path in image_paths:
+        img = cv2.imread(img_path)
+        video.write(img)
+
+    video.release()
 
     progress = 100
     video_name = "output.mp4"
+
 
 @app.route("/start", methods=["POST"])
 def start():
@@ -61,12 +70,14 @@ def start():
 
     return "started"
 
+
 @app.route("/progress")
 def get_progress():
     return jsonify({
         "progress": progress,
         "video": video_name
     })
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
