@@ -11,7 +11,6 @@ body {
     color: white;
 }
 
-/* main box */
 .container {
     background: white;
     color: black;
@@ -21,7 +20,6 @@ body {
     border-radius: 12px;
 }
 
-/* inputs */
 input, textarea {
     width: 90%;
     padding: 8px;
@@ -30,7 +28,6 @@ input, textarea {
     border: 1px solid #ccc;
 }
 
-/* button */
 button {
     padding: 10px;
     width: 95%;
@@ -45,7 +42,6 @@ button:hover {
     opacity: 0.9;
 }
 
-/* loader */
 #loader {
     display: none;
     position: fixed;
@@ -58,7 +54,6 @@ button:hover {
     color: white;
 }
 
-/* spinner */
 .spinner {
     margin: 200px auto;
     border: 6px solid #ccc;
@@ -73,7 +68,6 @@ button:hover {
     100% { transform: rotate(360deg); }
 }
 
-/* video */
 video {
     margin-top: 20px;
     width: 90%;
@@ -84,7 +78,6 @@ video {
 <script>
 function showLoader() {
     document.getElementById("loader").style.display = "block";
-    document.getElementById("status").innerText = "Processing PDF...";
 }
 </script>
 
@@ -104,10 +97,10 @@ function showLoader() {
 <p>⏱ Seconds per slide</p>
 <input type="number" name="duration" value="3">
 
-<p>⚙ Custom durations (optional)</p>
+<p>⚙ Custom durations</p>
 <input type="text" name="custom_durations" placeholder="2,3,4">
 
-<p>🎤 Narration (Text-to-Speech)</p>
+<p>🎤 Narration</p>
 <textarea name="narration" placeholder="Enter narration..."></textarea>
 
 <p>🎵 Background Audio</p>
@@ -118,7 +111,6 @@ function showLoader() {
 
 </form>
 
-<!-- RESULT -->
 {% if message %}
 <h2>{{ message }}</h2>
 
@@ -129,11 +121,10 @@ function showLoader() {
 
 </div>
 
-<!-- LOADER -->
 <div id="loader">
-    <h2 id="status">Processing Video... ⏳</h2>
+    <h2>Processing Video... ⏳</h2>
     <div class="spinner"></div>
-    <p>Please wait, this may take a few seconds</p>
+    <p>Please wait</p>
 </div>
 
 </body>
