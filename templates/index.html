@@ -24,40 +24,32 @@ input, textarea {
     width: 90%;
     padding: 8px;
     margin: 8px 0;
-    border-radius: 6px;
 }
 
 button {
     padding: 10px;
     width: 95%;
-    background: linear-gradient(45deg, #4facfe, #00f2fe);
+    background: #4facfe;
     border: none;
     color: white;
     border-radius: 6px;
 }
 
-#loader {
-    display: none;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    background: #0f172a;
-    color: white;
-    top: 0;
+.progress {
+    width: 90%;
+    background: #ddd;
+    margin: 10px auto;
+    border-radius: 10px;
 }
 
-video {
-    margin-top: 20px;
-    width: 90%;
+.progress-bar {
+    height: 20px;
+    width: 0%;
+    background: #00c6ff;
+    border-radius: 10px;
+    color: white;
 }
 </style>
-
-<script>
-function showLoader() {
-    document.getElementById("loader").style.display = "block";
-}
-</script>
-
 </head>
 
 <body>
@@ -66,41 +58,66 @@ function showLoader() {
 
 <div class="container">
 
-<form method="POST" enctype="multipart/form-data" onsubmit="showLoader()">
+<form id="form">
 
-<p>📄 Upload PDF</p>
-<input type="file" name="pdf" required>
+<p>Upload PDF</p>
+<input type="file" name="pdf">
 
-<p>⏱ Seconds per slide</p>
+<p>Seconds per slide</p>
 <input type="number" name="duration" value="3">
 
-<p>⚙ Custom durations</p>
-<input type="text" name="custom_durations" placeholder="2,3,4">
+<p>Custom durations</p>
+<input type="text" name="custom_durations">
 
-<p>🎤 Narration</p>
-<textarea name="narration" placeholder="Enter narration..."></textarea>
+<p>Narration</p>
+<textarea name="narration"></textarea>
 
-<p>🎵 Background Audio</p>
+<p>Background Audio</p>
 <input type="file" name="audio">
 
-<br>
-<button type="submit">✨ Create Video</button>
+<button type="button" onclick="startProcess()">Create Video</button>
 
 </form>
 
-{% if message %}
-<h2>{{ message }}</h2>
+<div class="progress">
+<div id="bar" class="progress-bar">0%</div>
+</div>
 
-<video controls>
-    <source src="{{ url_for('static', filename=video) }}" type="video/mp4">
-</video>
-{% endif %}
+<video id="video" controls></video>
 
 </div>
 
-<div id="loader">
-    <h2>Processing... ⏳</h2>
-</div>
+<script>
+function startProcess() {
+
+let formData = new FormData(document.getElementById("form"));
+
+fetch("/start", {
+    method: "POST",
+    body: formData
+});
+
+let interval = setInterval(() => {
+
+fetch("/progress")
+.then(res => res.json())
+.then(data => {
+
+let bar = document.getElementById("bar");
+
+bar.style.width = data.value + "%";
+bar.innerHTML = data.value + "%";
+
+if (data.value >= 100) {
+clearInterval(interval);
+document.getElementById("video").src = "/static/final.mp4";
+}
+
+});
+
+}, 1000);
+}
+</script>
 
 </body>
 </html>
