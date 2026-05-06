@@ -44,7 +44,7 @@ def home():
                         (100, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
             images = [img]
 
-        # 🔥 convert images → frames (FIXED)
+        # 🔥 convert images → frames
         frames = []
         for img in images:
             if hasattr(img, "convert"):
@@ -92,14 +92,14 @@ def home():
             except:
                 pass
 
-        # 🎵 background audio overrides narration
+        # 🎵 background audio
         if audio and audio.filename != "":
             audio.save("bg.mp3")
             audio_input = "bg.mp3"
 
         final_video = "video.mp4"
 
-        # 🔥 merge audio (Render-safe try)
+        # 🔥 merge audio
         if audio_input:
             try:
                 subprocess.call([
@@ -122,3 +122,9 @@ def home():
         )
 
     return render_template("index.html")
+
+
+# 🔥 RENDER FIX (MOST IMPORTANT)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
