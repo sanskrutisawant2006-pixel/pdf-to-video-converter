@@ -38,10 +38,6 @@ button {
     cursor: pointer;
 }
 
-button:hover {
-    opacity: 0.9;
-}
-
 #loader {
     display: none;
     position: fixed;
@@ -56,28 +52,28 @@ button:hover {
 
 .spinner {
     margin: 200px auto;
-    border: 6px solid #ccc;
-    border-top: 6px solid #00c6ff;
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    100% { transform: rotate(360deg); }
 }
 
 video {
     margin-top: 20px;
     width: 90%;
-    border-radius: 10px;
 }
 </style>
 
 <script>
 function showLoader() {
     document.getElementById("loader").style.display = "block";
+
+    let width = 0;
+    let interval = setInterval(() => {
+        if (width >= 90) {
+            clearInterval(interval);
+        } else {
+            width += 5;
+            document.getElementById("progressBar").style.width = width + "%";
+            document.getElementById("progressText").innerText = width + "%";
+        }
+    }, 400);
 }
 </script>
 
@@ -121,10 +117,20 @@ function showLoader() {
 
 </div>
 
+<!-- LOADER -->
 <div id="loader">
     <h2>Processing Video... ⏳</h2>
-    <div class="spinner"></div>
-    <p>Please wait</p>
+
+    <div style="width: 80%; margin: auto; background: #333; border-radius: 10px;">
+        <div id="progressBar" style="
+            width: 0%;
+            height: 20px;
+            background: #00c6ff;
+            border-radius: 10px;">
+        </div>
+    </div>
+
+    <p id="progressText">Starting...</p>
 </div>
 
 </body>
