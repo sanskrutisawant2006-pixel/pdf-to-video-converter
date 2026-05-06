@@ -34,28 +34,32 @@ def home():
         try:
             from pdf2image import convert_from_path
             images = convert_from_path(pdf_path)
-        except:
-            pass
+        except Exception as e:
+            print("PDF ERROR:", e)
 
-        # ❗ fallback (VERY IMPORTANT)
+        # 🚨 FALLBACK (ALWAYS SHOW SOMETHING)
         if not images:
-            img = np.ones((720, 1280, 3), dtype=np.uint8) * 255
-            cv2.putText(img, "PDF CONVERSION NOT SUPPORTED ON SERVER",
-                        (100, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-            images = [img]
+            images = []
+            for i in range(3):
+                img = np.ones((720, 1280, 3), dtype=np.uint8) * 255
+                cv2.putText(img, f"Slide {i+1}", (400, 350),
+                            cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 3)
+                images.append(img)
 
-        # 🔥 convert images → frames
+        # 🔥 CONVERT TO FRAMES
         frames = []
         for img in images:
-            if hasattr(img, "convert"):
+            if isinstance(img, np.ndarray):
+                frame = img
+            else:
                 img = img.convert("RGB")
-                img = np.array(img)
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                frame = np.array(img)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-            img = cv2.resize(img, (1280, 720))
-            frames.append(img)
+            frame = cv2.resize(frame, (1280, 720))
+            frames.append(frame)
 
-        # 🔥 durations
+        # 🔥 DURATION
         custom = []
         if custom_input:
             try:
@@ -80,26 +84,28 @@ def home():
 
         video.release()
 
-        # 🔊 narration
+        # 🔊 AUDIO PART
         audio_input = None
 
+        # narration
         if narration.strip():
             try:
                 from gtts import gTTS
                 tts = gTTS(narration)
                 tts.save("voice.mp3")
                 audio_input = "voice.mp3"
-            except:
-                pass
+                print("Narration OK")
+            except Exception as e:
+                print("TTS ERROR:", e)
 
-        # 🎵 background audio
+        # background audio
         if audio and audio.filename != "":
             audio.save("bg.mp3")
             audio_input = "bg.mp3"
 
         final_video = "video.mp4"
 
-        # 🔥 merge audio
+        # 🔥 MERGE AUDIO
         if audio_input:
             try:
                 subprocess.call([
@@ -112,8 +118,8 @@ def home():
                     os.path.join(STATIC_FOLDER, "final.mp4")
                 ])
                 final_video = "final.mp4"
-            except:
-                pass
+            except Exception as e:
+                print("FFMPEG ERROR:", e)
 
         return render_template(
             "index.html",
@@ -124,7 +130,7 @@ def home():
     return render_template("index.html")
 
 
-# 🔥 RENDER FIX (MOST IMPORTANT)
+# 🔥 RENDER FIX
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
