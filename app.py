@@ -1,8 +1,8 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 import numpy as np
 import os
 import subprocess
-import fitz  # PyMuPDF
+import fitz
 
 app = Flask(__name__)
 
@@ -12,113 +12,135 @@ STATIC_FOLDER = "static"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(STATIC_FOLDER, exist_ok=True)
 
+progress = {"value": 0}
 
-@app.route("/", methods=["GET", "POST"])
+
+@app.route("/", methods=["GET"])
 def home():
-    if request.method == "POST":
+    return render_template("index.html")
 
-        pdf = request.files.get("pdf")
-        duration = int(request.form.get("duration", 3))
-        custom_input = request.form.get("custom_durations", "")
-        narration = request.form.get("narration", "")
-        audio = request.files.get("audio")
 
-        if not pdf or pdf.filename == "":
-            return render_template("index.html", message="❌ Upload PDF")
+@app.route("/start", methods=["POST"])
+def start():
+    global progress
+    progress["value"] = 0
 
-        pdf_path = os.path.join(UPLOAD_FOLDER, "input.pdf")
-        pdf.save(pdf_path)
+    pdf = request.files.get("pdf")
+    duration = int(request.form.get("duration", 3))
+    custom_input = request.form.get("custom_durations", "")
+    narration = request.form.get("narration", "")
+    audio = request.files.get("audio")
 
-        # 🔥 PDF → Images using PyMuPDF
-        images = []
-        doc = fitz.open(pdf_path)
+    if not pdf:
+        return "No file", 400
 
-        for page in doc:
-            pix = page.get_pixmap()
-            img = np.frombuffer(pix.samples, dtype=np.uint8)
-            img = img.reshape(pix.height, pix.width, pix.n)
+    pdf_path = os.path.join(UPLOAD_FOLDER, "input.pdf")
+    pdf.save(pdf_path)
 
-            if pix.n == 4:
-                img = img[:, :, :3]
+    # 🔥 PDF → Images
+    images = []
+    doc = fitz.open(pdf_path)
 
-            images.append(img)
+    for page in doc:
+        pix = page.get_pixmap()
+        img = np.frombuffer(pix.samples, dtype=np.uint8)
+        img = img.reshape(pix.height, pix.width, pix.n)
 
-        if not images:
-            return render_template("index.html", message="❌ Failed to read PDF")
+        if pix.n == 4:
+            img = img[:, :, :3]
 
-        # 🔥 Durations
-        custom = []
-        if custom_input:
-            try:
-                custom = [int(x.strip()) for x in custom_input.split(",")]
-            except:
-                custom = []
+        images.append(img)
 
-        # 🔥 Save frames
-        frame_paths = []
-        count = 0
+    progress["value"] = 20
 
-        for i, img in enumerate(images):
-            dur = custom[i] if i < len(custom) else duration
+    # durations
+    custom = []
+    if custom_input:
+        try:
+            custom = [int(x.strip()) for x in custom_input.split(",")]
+        except:
+            custom = []
 
-            for _ in range(dur * 2):  # FPS = 2
-                path = os.path.join(UPLOAD_FOLDER, f"frame_{count}.jpg")
+    # 🔥 Save frames
+    count = 0
 
-                import cv2
-                img_resized = cv2.resize(img, (1280, 720))
-                cv2.imwrite(path, img_resized)
+    for i, img in enumerate(images):
+        dur = custom[i] if i < len(custom) else duration
 
-                frame_paths.append(path)
-                count += 1
+        for _ in range(dur * 2):
+            path = os.path.join(UPLOAD_FOLDER, f"frame_{count}.jpg")
 
-        # 🔥 Create video
-        video_path = os.path.join(STATIC_FOLDER, "video.mp4")
+            import cv2
+            img_resized = cv2.resize(img, (1280, 720))
+            cv2.imwrite(path, img_resized)
 
-        subprocess.call([
-            "ffmpeg", "-y",
-            "-framerate", "2",
-            "-i", os.path.join(UPLOAD_FOLDER, "frame_%d.jpg"),
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            video_path
-        ])
+            count += 1
 
-        # 🔊 Audio
-        audio_input = None
+    progress["value"] = 50
 
-        # narration
-        if narration.strip():
-            from gtts import gTTS
-            tts = gTTS(narration)
-            tts.save("voice.mp3")
-            audio_input = "voice.mp3"
+    # 🔥 Create video
+    video_path = os.path.join(STATIC_FOLDER, "video.mp4")
 
-        # background audio
-        if audio and audio.filename != "":
-            audio.save("bg.mp3")
-            audio_input = "bg.mp3"
+    subprocess.call([
+        "ffmpeg", "-y",
+        "-framerate", "2",
+        "-i", os.path.join(UPLOAD_FOLDER, "frame_%d.jpg"),
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        video_path
+    ])
 
-        final_video = "video.mp4"
+    progress["value"] = 70
 
-        if audio_input:
+    # 🔊 AUDIO
+    audio_files = []
+
+    if narration.strip():
+        from gtts import gTTS
+        tts = gTTS(narration)
+        tts.save("voice.mp3")
+        audio_files.append("voice.mp3")
+
+    if audio and audio.filename != "":
+        audio.save("bg.mp3")
+        audio_files.append("bg.mp3")
+
+    final_video = "video.mp4"
+
+    if audio_files:
+        if len(audio_files) == 1:
             subprocess.call([
                 "ffmpeg", "-y",
                 "-i", video_path,
-                "-i", audio_input,
+                "-i", audio_files[0],
                 "-shortest",
                 "-c:v", "copy",
                 "-c:a", "aac",
                 os.path.join(STATIC_FOLDER, "final.mp4")
             ])
-            final_video = "final.mp4"
+        else:
+            subprocess.call([
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", audio_files[0],
+                "-i", audio_files[1],
+                "-filter_complex",
+                "[1:a]volume=1[a1];[2:a]volume=0.3[a2];[a1][a2]amix=inputs=2",
+                "-c:v", "copy",
+                "-c:a", "aac",
+                os.path.join(STATIC_FOLDER, "final.mp4")
+            ])
 
-        return render_template(
-            "index.html",
-            message="✅ Video Ready!",
-            video=final_video
-        )
+        final_video = "final.mp4"
 
-    return render_template("index.html")
+    progress["value"] = 100
+
+    return jsonify({"video": final_video})
+
+
+@app.route("/progress")
+def get_progress():
+    return jsonify(progress)
 
 
 if __name__ == "__main__":
