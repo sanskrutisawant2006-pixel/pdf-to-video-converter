@@ -18,6 +18,7 @@ body {
     margin: 40px auto;
     padding: 20px;
     border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
 }
 
 input, textarea {
@@ -33,6 +34,7 @@ button {
     border: none;
     color: white;
     border-radius: 6px;
+    cursor: pointer;
 }
 
 .progress {
@@ -48,6 +50,15 @@ button {
     background: #00c6ff;
     border-radius: 10px;
     color: white;
+    text-align: center;
+}
+
+video {
+    width: 100%;
+    height: auto;
+    margin-top: 20px;
+    border-radius: 10px;
+    display: block;
 }
 </style>
 </head>
@@ -60,27 +71,27 @@ button {
 
 <form id="form">
 
-<p>Upload PDF</p>
+<p>📄 Upload PDF</p>
 <input type="file" name="pdf">
 
-<p>Seconds per slide</p>
+<p>⏱ Seconds per slide</p>
 <input type="number" name="duration" value="3">
 
-<p>Custom durations</p>
-<input type="text" name="custom_durations">
+<p>⚙ Custom durations</p>
+<input type="text" name="custom_durations" placeholder="2,3,4">
 
-<p>Narration</p>
-<textarea name="narration"></textarea>
+<p>🎤 Narration</p>
+<textarea name="narration" placeholder="Enter narration..."></textarea>
 
-<p>Background Audio</p>
+<p>🎵 Background Audio</p>
 <input type="file" name="audio">
 
-<button type="button" onclick="startProcess()">Create Video</button>
+<button type="button" onclick="startProcess()">✨ Create Video</button>
 
 </form>
 
 <div class="progress">
-<div id="bar" class="progress-bar">0%</div>
+    <div id="bar" class="progress-bar">0%</div>
 </div>
 
 <video id="video" controls></video>
