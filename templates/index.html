@@ -25,7 +25,6 @@ input, textarea {
     padding: 8px;
     margin: 8px 0;
     border-radius: 6px;
-    border: 1px solid #ccc;
 }
 
 button {
@@ -35,23 +34,16 @@ button {
     border: none;
     color: white;
     border-radius: 6px;
-    cursor: pointer;
 }
 
 #loader {
     display: none;
     position: fixed;
-    z-index: 999;
-    left: 0;
-    top: 0;
     width: 100%;
     height: 100%;
     background: #0f172a;
     color: white;
-}
-
-.spinner {
-    margin: 200px auto;
+    top: 0;
 }
 
 video {
@@ -63,17 +55,6 @@ video {
 <script>
 function showLoader() {
     document.getElementById("loader").style.display = "block";
-
-    let width = 0;
-    let interval = setInterval(() => {
-        if (width >= 90) {
-            clearInterval(interval);
-        } else {
-            width += 5;
-            document.getElementById("progressBar").style.width = width + "%";
-            document.getElementById("progressText").innerText = width + "%";
-        }
-    }, 400);
 }
 </script>
 
@@ -117,20 +98,8 @@ function showLoader() {
 
 </div>
 
-<!-- LOADER -->
 <div id="loader">
-    <h2>Processing Video... ⏳</h2>
-
-    <div style="width: 80%; margin: auto; background: #333; border-radius: 10px;">
-        <div id="progressBar" style="
-            width: 0%;
-            height: 20px;
-            background: #00c6ff;
-            border-radius: 10px;">
-        </div>
-    </div>
-
-    <p id="progressText">Starting...</p>
+    <h2>Processing... ⏳</h2>
 </div>
 
 </body>
