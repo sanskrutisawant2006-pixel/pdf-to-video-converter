@@ -1,8 +1,8 @@
 from flask import Flask, render_template, request
-import cv2
 import numpy as np
 import os
 import subprocess
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
 
@@ -23,43 +23,30 @@ def home():
         narration = request.form.get("narration", "")
         audio = request.files.get("audio")
 
-        if not pdf:
-            return render_template("index.html", message="Upload PDF")
+        if not pdf or pdf.filename == "":
+            return render_template("index.html", message="❌ Upload PDF")
 
         pdf_path = os.path.join(UPLOAD_FOLDER, "input.pdf")
         pdf.save(pdf_path)
 
-        # 🔥 TRY PDF → images
+        # 🔥 PDF → Images using PyMuPDF
         images = []
-        try:
-            from pdf2image import convert_from_path
-            images = convert_from_path(pdf_path)
-        except Exception as e:
-            print("PDF ERROR:", e)
+        doc = fitz.open(pdf_path)
 
-        # 🚨 FALLBACK (ALWAYS SHOW SOMETHING)
+        for page in doc:
+            pix = page.get_pixmap()
+            img = np.frombuffer(pix.samples, dtype=np.uint8)
+            img = img.reshape(pix.height, pix.width, pix.n)
+
+            if pix.n == 4:
+                img = img[:, :, :3]
+
+            images.append(img)
+
         if not images:
-            images = []
-            for i in range(3):
-                img = np.ones((720, 1280, 3), dtype=np.uint8) * 255
-                cv2.putText(img, f"Slide {i+1}", (400, 350),
-                            cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 3)
-                images.append(img)
+            return render_template("index.html", message="❌ Failed to read PDF")
 
-        # 🔥 CONVERT TO FRAMES
-        frames = []
-        for img in images:
-            if isinstance(img, np.ndarray):
-                frame = img
-            else:
-                img = img.convert("RGB")
-                frame = np.array(img)
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
-            frame = cv2.resize(frame, (1280, 720))
-            frames.append(frame)
-
-        # 🔥 DURATION
+        # 🔥 Durations
         custom = []
         if custom_input:
             try:
@@ -67,36 +54,44 @@ def home():
             except:
                 custom = []
 
-        video_path = os.path.join(STATIC_FOLDER, "video.mp4")
+        # 🔥 Save frames
+        frame_paths = []
+        count = 0
 
-        video = cv2.VideoWriter(
-            video_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
-            18,
-            (1280, 720)
-        )
-
-        for i, frame in enumerate(frames):
+        for i, img in enumerate(images):
             dur = custom[i] if i < len(custom) else duration
 
-            for _ in range(dur * 18):
-                video.write(frame)
+            for _ in range(dur * 2):  # FPS = 2
+                path = os.path.join(UPLOAD_FOLDER, f"frame_{count}.jpg")
 
-        video.release()
+                import cv2
+                img_resized = cv2.resize(img, (1280, 720))
+                cv2.imwrite(path, img_resized)
 
-        # 🔊 AUDIO PART
+                frame_paths.append(path)
+                count += 1
+
+        # 🔥 Create video
+        video_path = os.path.join(STATIC_FOLDER, "video.mp4")
+
+        subprocess.call([
+            "ffmpeg", "-y",
+            "-framerate", "2",
+            "-i", os.path.join(UPLOAD_FOLDER, "frame_%d.jpg"),
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            video_path
+        ])
+
+        # 🔊 Audio
         audio_input = None
 
         # narration
         if narration.strip():
-            try:
-                from gtts import gTTS
-                tts = gTTS(narration)
-                tts.save("voice.mp3")
-                audio_input = "voice.mp3"
-                print("Narration OK")
-            except Exception as e:
-                print("TTS ERROR:", e)
+            from gtts import gTTS
+            tts = gTTS(narration)
+            tts.save("voice.mp3")
+            audio_input = "voice.mp3"
 
         # background audio
         if audio and audio.filename != "":
@@ -105,21 +100,17 @@ def home():
 
         final_video = "video.mp4"
 
-        # 🔥 MERGE AUDIO
         if audio_input:
-            try:
-                subprocess.call([
-                    "ffmpeg", "-y",
-                    "-i", video_path,
-                    "-i", audio_input,
-                    "-shortest",
-                    "-c:v", "copy",
-                    "-c:a", "aac",
-                    os.path.join(STATIC_FOLDER, "final.mp4")
-                ])
-                final_video = "final.mp4"
-            except Exception as e:
-                print("FFMPEG ERROR:", e)
+            subprocess.call([
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-i", audio_input,
+                "-shortest",
+                "-c:v", "copy",
+                "-c:a", "aac",
+                os.path.join(STATIC_FOLDER, "final.mp4")
+            ])
+            final_video = "final.mp4"
 
         return render_template(
             "index.html",
@@ -130,7 +121,6 @@ def home():
     return render_template("index.html")
 
 
-# 🔥 RENDER FIX
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
