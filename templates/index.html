@@ -5,117 +5,136 @@
 
 <style>
 body {
+    text-align: center;
     font-family: Arial;
     background: linear-gradient(135deg, #667eea, #764ba2);
-    text-align: center;
+    color: white;
 }
 
+/* main box */
 .container {
     background: white;
-    width: 400px;
+    color: black;
+    width: 420px;
     margin: 40px auto;
     padding: 20px;
-    border-radius: 10px;
+    border-radius: 12px;
 }
 
-input {
+/* inputs */
+input, textarea {
     width: 90%;
-    margin: 10px;
     padding: 8px;
+    margin: 8px 0;
+    border-radius: 6px;
+    border: 1px solid #ccc;
 }
 
+/* button */
 button {
     padding: 10px;
-    background: #4facfe;
+    width: 95%;
+    background: linear-gradient(45deg, #4facfe, #00f2fe);
     border: none;
     color: white;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
-.progress {
+button:hover {
+    opacity: 0.9;
+}
+
+/* loader */
+#loader {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    left: 0;
+    top: 0;
     width: 100%;
-    background: #eee;
-}
-
-.progress-bar {
-    width: 0%;
-    background: #4facfe;
+    height: 100%;
+    background: #0f172a;
     color: white;
 }
 
+/* spinner */
+.spinner {
+    margin: 200px auto;
+    border: 6px solid #ccc;
+    border-top: 6px solid #00c6ff;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+/* video */
 video {
-    width: 100%;
-    margin-top: 10px;
+    margin-top: 20px;
+    width: 90%;
+    border-radius: 10px;
 }
 </style>
+
+<script>
+function showLoader() {
+    document.getElementById("loader").style.display = "block";
+    document.getElementById("status").innerText = "Processing PDF...";
+}
+</script>
+
 </head>
 
 <body>
 
+<h1>🚀 PDF → Video Converter</h1>
+
 <div class="container">
 
-<h2>🚀 PDF → Video Converter</h2>
+<form method="POST" enctype="multipart/form-data" onsubmit="showLoader()">
 
-<form id="form">
+<p>📄 Upload PDF</p>
+<input type="file" name="pdf" required>
 
-<p>Upload PDF</p>
-<input type="file" name="file">
+<p>⏱ Seconds per slide</p>
+<input type="number" name="duration" value="3">
 
-<p>Seconds per slide</p>
-<input type="number" name="default_duration" value="3">
+<p>⚙ Custom durations (optional)</p>
+<input type="text" name="custom_durations" placeholder="2,3,4">
 
-<p>Custom durations</p>
-<input type="text" name="durations" placeholder="2,3,5">
+<p>🎤 Narration (Text-to-Speech)</p>
+<textarea name="narration" placeholder="Enter narration..."></textarea>
 
-<p>Background Audio</p>
+<p>🎵 Background Audio</p>
 <input type="file" name="audio">
 
-<button type="button" onclick="startProcess()">Create Video</button>
+<br>
+<button type="submit">✨ Create Video</button>
 
 </form>
 
-<div class="progress">
-<div id="bar" class="progress-bar">0%</div>
+<!-- RESULT -->
+{% if message %}
+<h2>{{ message }}</h2>
+
+<video controls>
+    <source src="{{ url_for('static', filename=video) }}" type="video/mp4">
+</video>
+{% endif %}
+
 </div>
 
-<video id="video" controls></video>
-
-<a id="download" href="/download" style="display:none;">Download</a>
-
+<!-- LOADER -->
+<div id="loader">
+    <h2 id="status">Processing Video... ⏳</h2>
+    <div class="spinner"></div>
+    <p>Please wait, this may take a few seconds</p>
 </div>
-
-<script>
-function startProcess() {
-
-let formData = new FormData(document.getElementById("form"));
-
-fetch("/start", {
-    method: "POST",
-    body: formData
-});
-
-let interval = setInterval(() => {
-
-fetch("/progress")
-.then(res => res.json())
-.then(data => {
-
-let bar = document.getElementById("bar");
-
-bar.style.width = data.value + "%";
-bar.innerHTML = data.value + "%";
-
-if (data.value >= 100) {
-clearInterval(interval);
-
-document.getElementById("video").src = "/download";
-document.getElementById("download").style.display = "block";
-}
-
-});
-
-}, 1000);
-}
-</script>
 
 </body>
 </html>
