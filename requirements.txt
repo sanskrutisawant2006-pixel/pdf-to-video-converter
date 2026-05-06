@@ -1,5 +1,5 @@
 flask
-opencv-python-headless
 numpy
-pdf2image
+opencv-python-headless
 gtts
+PyMuPDF
