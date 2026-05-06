@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import numpy as np
 import os
 import subprocess
-import fitz
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
 
@@ -15,7 +15,7 @@ os.makedirs(STATIC_FOLDER, exist_ok=True)
 progress = {"value": 0}
 
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
     return render_template("index.html")
 
@@ -32,7 +32,7 @@ def start():
     audio = request.files.get("audio")
 
     if not pdf:
-        return "No file", 400
+        return "No PDF uploaded", 400
 
     pdf_path = os.path.join(UPLOAD_FOLDER, "input.pdf")
     pdf.save(pdf_path)
@@ -63,11 +63,10 @@ def start():
 
     # 🔥 Save frames
     count = 0
-
     for i, img in enumerate(images):
         dur = custom[i] if i < len(custom) else duration
 
-        for _ in range(dur * 2):
+        for _ in range(dur * 2):  # fps = 2
             path = os.path.join(UPLOAD_FOLDER, f"frame_{count}.jpg")
 
             import cv2
@@ -92,7 +91,7 @@ def start():
 
     progress["value"] = 70
 
-    # 🔊 AUDIO
+    # 🔊 AUDIO SYSTEM
     audio_files = []
 
     if narration.strip():
